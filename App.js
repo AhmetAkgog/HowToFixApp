@@ -1,16 +1,20 @@
-// App.js
 import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createDrawerNavigator } from '@react-navigation/drawer';
 import { View, ActivityIndicator } from 'react-native';
 import auth from '@react-native-firebase/auth';
-
+import { Provider as PaperProvider } from 'react-native-paper';
+// Screens
 import ProblemUploader from './app/screens/ProblemUploader';
 import ResultsHistoryScreen from './app/screens/ResultHistoryScreen';
 import SettingsScreen from './app/screens/SettingsScreen';
 import AuthScreen from './app/screens/AuthScreen';
+import InventoryScreen from './app/screens/InventoryScreen';
+import ProfileScreen from './app/screens/ProfileScreen';
 
 const Tab = createBottomTabNavigator();
+const Drawer = createDrawerNavigator();
 
 function AppTabs() {
   return (
@@ -19,6 +23,16 @@ function AppTabs() {
       <Tab.Screen name="History" component={ResultsHistoryScreen} />
       <Tab.Screen name="Settings" component={SettingsScreen} />
     </Tab.Navigator>
+  );
+}
+
+function DrawerWrapper() {
+  return (
+    <Drawer.Navigator>
+      <Drawer.Screen name="Main" component={AppTabs} options={{ headerShown: false }} />
+      <Drawer.Screen name="Inventory" component={InventoryScreen} />
+      <Drawer.Screen name="Profile" component={ProfileScreen} />
+    </Drawer.Navigator>
   );
 }
 
@@ -31,7 +45,7 @@ export default function App() {
       setUser(currentUser);
       if (initializing) setInitializing(false);
     });
-    return unsubscribe; // Clean up on unmount
+    return unsubscribe;
   }, [initializing]);
 
   if (initializing) {
@@ -43,12 +57,14 @@ export default function App() {
   }
 
   return (
-    <NavigationContainer>
-      {user ? (
-        <AppTabs />
-      ) : (
-        <AuthScreen onAuthenticated={() => setUser(auth().currentUser)} />
-      )}
-    </NavigationContainer>
+    <PaperProvider>
+      <NavigationContainer>
+        {user ? (
+          <DrawerWrapper />
+        ) : (
+          <AuthScreen onAuthenticated={() => setUser(auth().currentUser)} />
+        )}
+      </NavigationContainer>
+    </PaperProvider>
   );
 }

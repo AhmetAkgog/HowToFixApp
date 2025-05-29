@@ -11,36 +11,44 @@ const db = admin.firestore();
 const openaiApiKey = defineSecret("OPENAI_API_KEY");
 
 exports.extractProblemMultimodalV2 = onCall({ secrets: [openaiApiKey] }, async (request) => {
-  const context = request?.context;
+  const context = request.auth;
 
   const openai = new OpenAI({ apiKey: openaiApiKey.value() });
 
-  const data = request.data;
-  const { base64Image, textDescription } = data;
+  const data = request.data || {};
+  const { base64Image, textDescription, textOnlyMode } = data;
 
-  if (!base64Image) {
-    throw new Error("Image is required");
+  if (!base64Image && (!textDescription || textDescription.trim() === '')) {
+    throw new HttpsError('invalid-argument', 'At least an image or text description is required.');
   }
 
-  // 1️⃣ Problem Understanding
+  const messageContent = [];
+
+  if (textDescription && textDescription.trim().length > 0) {
+    messageContent.push({
+      type: "text",
+      text: `User's description: ${textDescription}\n\nPlease identify the object and the issue or intent based on the user's input above. Respond in this format:\nObject: <...>\nIssue or Intent: <...>`,
+    });
+  }
+
+  if (!textOnlyMode && base64Image) {
+    messageContent.push({
+      type: "image_url",
+      image_url: {
+        url: `data:image/jpeg;base64,${base64Image}`,
+      },
+    });
+  }
+
   const messages = [
     {
       role: "user",
-      content: [
-        {
-          type: "image_url",
-          image_url: {
-            url: `data:image/jpeg;base64,${base64Image}`,
-          },
-        },
-        {
-          type: "text",
-          text: textDescription ||
-            "Please identify the object and either the problem OR the project intention. Format output like: Object: <...>\nIssue or Intent: <...>",
-        },
-      ],
+      content: messageContent,
     },
   ];
+
+
+
 
   let resultText;
   try {
@@ -105,16 +113,45 @@ exports.extractProblemMultimodalV2 = onCall({ secrets: [openaiApiKey] }, async (
     logger.warn("⚠️ Instruction writer failed:", err);
   }
 
+  // 🛠️ 4️⃣ Tool Recommendation
+  let toolSuggestions = "";
+  try {
+    const toolPrompt = `
+  You are a helpful product recommendation assistant for DIY and repair projects.
+
+  Only recommend products the user may not already have.
+  Avoid suggesting common household tools like screwdrivers, scissors, duct tape, tape measure, or pliers.
+
+  Project Context: ${issue}
+
+  Instructions: ${instructions}
+
+  Return a product suggestion for each specific tool or part needed, in this format:
+  - [Tool Name]: [Suggested product or link]
+  `;
+
+    const toolResp = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [{ role: "user", content: toolPrompt }],
+    });
+
+    toolSuggestions = toolResp.choices[0].message.content;
+  } catch (err) {
+    logger.warn("⚠️ Tool recommender failed:", err);
+  }
+
+
   // 4️⃣ Store in Firestore
   try {
     await db.collection("problem_results").add({
-      uid: context?.auth?.uid || null,
+      uid: context?.uid || null,
       object,
       issue,
       likelyCause,
       taskType,
       result: resultText,
       instructions,
+      toolSuggestions,
       timestamp: admin.firestore.FieldValue.serverTimestamp(),
     });
   } catch (err) {
@@ -129,5 +166,6 @@ exports.extractProblemMultimodalV2 = onCall({ secrets: [openaiApiKey] }, async (
     taskType,
     result: resultText,
     instructions,
+    toolSuggestions,
   };
 });
