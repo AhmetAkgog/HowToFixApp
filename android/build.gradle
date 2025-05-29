@@ -12,9 +12,10 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath("com.android.tools.build:gradle")
+        classpath 'com.google.gms:google-services:4.3.15' // ✅ or latest
+        classpath("com.android.tools.build:gradle:8.2.2") // ✅ add version
         classpath("com.facebook.react:react-native-gradle-plugin")
-        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.0.21") // ✅ explicitly set version
     }
 }
 
