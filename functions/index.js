@@ -105,9 +105,9 @@ exports.extractProblemMultimodalV2 = onCall({ secrets: [openaiApiKey] }, async (
 
   let instructionPrompt;
   if (taskType === "repair") {
-    instructionPrompt = `You are a step-by-step repair guide generator.\n\nObject: ${object}\nIssue: ${issue}\n\nGenerate clear repair instructions. Include:\n- Step-by-step process\n- Required tools or materials\n- Estimated difficulty (Easy, Moderate, Hard)\n- Estimated repair time (in minutes)`;
+    instructionPrompt = `You are a step-by-step repair guide generator.\n\nObject: ${object}\nIssue: ${issue}\n\nGenerate clear repair instructions. Include:\n- Step-by-step process\n- Required tools or materials\n- Estimated difficulty (Easy, Moderate, Hard)\n- Estimated repair time (in minutes). Do not include Markdown or formatting symbols like **, ##, ###, *, etc.`;
   } else {
-    instructionPrompt = `You are a repair assistant.\n\nObject: ${object}\nIssue: ${issue}\n\nGenerate basic, clear, step-by-step instructions on how to fix the problem. Do not include tools or time estimates.`;
+    instructionPrompt = `You are a repair assistant.\n\nObject: ${object}\nIssue: ${issue}\n\nGenerate basic, clear, step-by-step instructions on how to fix the problem. Do not include tools or time estimates. Do not include Markdown or formatting symbols like **, ##, ###, *, etc.`;
   }
 
   let instructions = "";
@@ -124,7 +124,7 @@ exports.extractProblemMultimodalV2 = onCall({ secrets: [openaiApiKey] }, async (
   let toolSuggestions = "";
   try {
     const toolPrompt = `
-You are a helpful product recommendation assistant for DIY and repair projects.
+You are a helpful product recommendation assistant for DIY and repair projects. Do not include Markdown or formatting symbols like **, ##, ###, *, etc.
 
 User Profile:
 - Skill Level: ${userProfile.skillLevel || "unknown"}
@@ -154,6 +154,36 @@ Return a product suggestion for each specific tool or part needed, in this forma
     logger.warn("⚠️ Tool recommender failed:", err);
   }
 
+  let sessionId;
+  try {
+    const sessionRef = await db.collection("chat_sessions").add({
+      uid: uid || null,
+      context: {
+        object,
+        issue,
+        likelyCause,
+        taskType,
+        skillLevel: userProfile?.skillLevel || null,
+        toolPreference: userProfile?.toolPreference || null,
+        inventory: userInventory || [],
+      },
+      messages: [
+        {
+          role: "user",
+          content: textDescription || "(image-based request)",
+        },
+        {
+          role: "assistant",
+          content: instructions,
+        },
+      ],
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    sessionId = sessionRef.id;
+  } catch (err) {
+    logger.error("❌ Failed to create chat session:", err);
+  }
+
   try {
     await db.collection("problem_results").add({
       uid: uid || null,
@@ -179,5 +209,55 @@ Return a product suggestion for each specific tool or part needed, in this forma
     result: resultText,
     instructions,
     toolSuggestions,
+    sessionId, // ⬆️ new
+  };
+});
+
+exports.chatWithAssistant = onCall({ secrets: [openaiApiKey] }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'User must be logged in');
+
+  const { sessionId, userMessage } = request.data || {};
+  if (!sessionId || !userMessage) {
+    throw new HttpsError('invalid-argument', 'Missing sessionId or userMessage');
+  }
+
+  const sessionRef = db.collection('chat_sessions').doc(sessionId);
+  const sessionSnap = await sessionRef.get();
+
+  if (!sessionSnap.exists) {
+    throw new HttpsError('not-found', 'Session not found');
+  }
+
+  const sessionData = sessionSnap.data();
+  const pastMessages = sessionData.messages || [];
+
+  // Add new user message
+  const updatedMessages = [...pastMessages, { role: 'user', content: userMessage }];
+
+  // Call OpenAI with full conversation history
+  let assistantReply;
+  try {
+    const chatResp = await new OpenAI({ apiKey: openaiApiKey.value() }).chat.completions.create({
+      model: 'gpt-4o',
+      messages: updatedMessages,
+    });
+    assistantReply = chatResp.choices[0].message.content;
+  } catch (err) {
+    logger.error("❌ OpenAI follow-up chat error:", err);
+    throw new HttpsError('internal', 'AI assistant failed: ' + err.message);
+  }
+
+  // Save assistant reply
+  updatedMessages.push({ role: 'assistant', content: assistantReply });
+
+  await sessionRef.update({
+    messages: updatedMessages,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  return {
+    success: true,
+    reply: assistantReply,
   };
 });
