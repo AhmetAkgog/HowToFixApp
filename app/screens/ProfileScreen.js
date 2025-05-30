@@ -3,15 +3,15 @@ import {
   View,
   Text,
   TextInput,
-  Button,
   StyleSheet,
   Alert,
+  ImageBackground,
+  TouchableOpacity,
   ScrollView,
 } from 'react-native';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 import { Picker } from '@react-native-picker/picker';
-import { useNavigation } from '@react-navigation/native';
 
 export default function ProfileScreen() {
   const [firstName, setFirstName] = useState('');
@@ -19,7 +19,6 @@ export default function ProfileScreen() {
   const [skillLevel, setSkillLevel] = useState('');
   const [toolPreference, setToolPreference] = useState('');
   const user = auth().currentUser;
-  const navigation = useNavigation();
 
   useEffect(() => {
     if (user) {
@@ -34,8 +33,8 @@ export default function ProfileScreen() {
             const data = doc.data();
             setFirstName(data.firstName || '');
             setLastName(data.lastName || '');
-            setSkillLevel(data.skillLevel || '');
-            setToolPreference(data.toolPreference || '');
+            setSkillLevel(data.skillLevel?.toLowerCase() || '');
+            setToolPreference(data.toolPreference?.toLowerCase() || '');
           }
         });
     }
@@ -66,7 +65,6 @@ export default function ProfileScreen() {
   const handleLogout = async () => {
     try {
       await auth().signOut();
-      // App.js navigation yönetecek
     } catch (error) {
       console.error('Logout failed:', error);
       Alert.alert('Logout Error', error.message);
@@ -74,75 +72,143 @@ export default function ProfileScreen() {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>👤 Your Profile</Text>
+    <ImageBackground
+      source={require('../../assets/background.png')}
+      style={styles.background}
+      resizeMode="cover"
+    >
+      <ScrollView contentContainerStyle={styles.scroll}>
+        <View style={styles.card}>
+          <Text style={styles.title}>👤 Your Profile</Text>
 
-      <TextInput
-        style={styles.input}
-        placeholder="First Name"
-        value={firstName}
-        onChangeText={setFirstName}
-      />
+          <TextInput
+            style={styles.input}
+            placeholder="First Name"
+            placeholderTextColor="#666"
+            value={firstName}
+            onChangeText={setFirstName}
+          />
 
-      <TextInput
-        style={styles.input}
-        placeholder="Last Name"
-        value={lastName}
-        onChangeText={setLastName}
-      />
+          <TextInput
+            style={styles.input}
+            placeholder="Last Name"
+            placeholderTextColor="#666"
+            value={lastName}
+            onChangeText={setLastName}
+          />
 
-      <Text style={styles.label}>Skill Level</Text>
-      <Picker selectedValue={skillLevel} onValueChange={setSkillLevel}>
-        <Picker.Item label="Select..." value="" />
-        <Picker.Item label="Beginner" value="beginner" />
-        <Picker.Item label="Intermediate" value="intermediate" />
-        <Picker.Item label="Expert" value="expert" />
-      </Picker>
+          <Text style={styles.label}>Skill Level</Text>
+          <View style={styles.pickerWrapper}>
+            <Picker
+              selectedValue={skillLevel}
+              onValueChange={setSkillLevel}
+              style={styles.picker}
+            >
+              <Picker.Item label="Select..." value="" />
+              <Picker.Item label="Beginner" value="beginner" />
+              <Picker.Item label="Intermediate" value="intermediate" />
+              <Picker.Item label="Expert" value="expert" />
+            </Picker>
+          </View>
 
-      <Text style={styles.label}>Tool Preference</Text>
-      <Picker selectedValue={toolPreference} onValueChange={setToolPreference}>
-        <Picker.Item label="Select..." value="" />
-        <Picker.Item label="Manual Tools" value="manual" />
-        <Picker.Item label="Power Tools" value="power" />
-        <Picker.Item label="No Preference" value="no_preference" />
-      </Picker>
+          <Text style={styles.label}>Tool Preference</Text>
+          <View style={styles.pickerWrapper}>
+            <Picker
+              selectedValue={toolPreference}
+              onValueChange={setToolPreference}
+              style={styles.picker}
+            >
+              <Picker.Item label="Select..." value="" />
+              <Picker.Item label="Manual Tools" value="manual" />
+              <Picker.Item label="Power Tools" value="power" />
+              <Picker.Item label="No Preference" value="no_preference" />
+            </Picker>
+          </View>
 
-      <View style={styles.buttonContainer}>
-        <Button title="💾 Save Profile" onPress={handleSave} />
-      </View>
+          <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
+            <Text style={styles.saveButtonText}>💾 Save Profile</Text>
+          </TouchableOpacity>
 
-      <View style={styles.buttonContainer}>
-        <Button title="🚪 Log Out" onPress={handleLogout} color="#cc0000" />
-      </View>
-    </ScrollView>
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+            <Text style={styles.logoutButtonText}>🚪 Log Out</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </ImageBackground>
   );
 }
 
+const LOGO_Yellow = '#f5b900';
+const orange = '#ff6f00';
+
 const styles = StyleSheet.create({
-  container: {
-    padding: 20,
+  background: {
+    flex: 1,
+  },
+  scroll: {
     flexGrow: 1,
     justifyContent: 'center',
+    padding: 20,
+  },
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 20,
+    elevation: 6,
   },
   title: {
-    fontSize: 24,
+    fontSize: 22,
+    fontWeight: '700',
     marginBottom: 20,
-    alignSelf: 'center',
+    textAlign: 'center',
+    color: '#333',
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 6,
-    padding: 10,
-    fontSize: 16,
-    marginBottom: 15,
+    borderColor: LOGO_Yellow,
+    padding: 12,
+    marginBottom: 16,
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    color: '#000',
   },
   label: {
-    marginTop: 15,
-    fontWeight: 'bold',
+    fontWeight: '600',
     marginBottom: 5,
+    color: '#333',
   },
-  buttonContainer: {
+  pickerWrapper: {
+    borderWidth: 1,
+    borderColor: LOGO_Yellow,
+    borderRadius: 10,
+    marginBottom: 16,
+    overflow: 'hidden',
+  },
+  picker: {
+    color: '#666',
+  },
+  saveButton: {
+    backgroundColor: orange,
+    padding: 14,
+    borderRadius: 10,
+    alignItems: 'center',
     marginTop: 20,
+  },
+  saveButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  logoutButton: {
+    padding: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginTop: 10,
+    backgroundColor: '#888',
+  },
+  logoutButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
