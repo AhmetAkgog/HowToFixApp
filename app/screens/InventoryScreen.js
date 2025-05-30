@@ -1,70 +1,40 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, FlatList } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  StyleSheet,
+  TouchableOpacity,
+  FlatList,
+  ScrollView,
+  ImageBackground,
+  Keyboard,
+  Platform,
+  KeyboardAvoidingView,
+  TouchableWithoutFeedback,
+} from 'react-native';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 
 const TOOL_DATABASE = [
-  // 🛠️ Hand Tools
-  'Cordless Drill',
-  'Screwdriver Set',
-  'Hammer',
-  'Pliers',
-  'Adjustable Wrench',
-  'Wrench Set',
-  'Wire Cutter',
-  'Utility Knife',
-  'Chisel Set',
-  'Hand Saw',
-  'Putty Knife',
-  'Hacksaw',
-  'Staple Gun',
-  'Allen Key Set',
-  'Clamps',
-
-  // 🔌 Electrical & Electronics
-  'Multimeter',
-  'Soldering Iron',
-  'Heat Gun',
-  'Glue Gun',
-  'Wire Stripper',
-  'Desoldering Pump',
-  'Insulation Tape',
-
-  // 🔧 Plumbing Tools
-  'Pipe Wrench',
-  'Pipe Cutter',
-  'Plumber’s Tape',
-  'Basin Wrench',
-
-  // 🎨 DIY & Painting
-  'Paint Brush Set',
-  'Paint Roller',
-  'Sandpaper Set',
-  'Masking Tape',
-  'Drop Cloth',
-  'Silicone Gun',
-  'Caulking Tool',
-  'Paint Scraper',
-  'Putty Knife',
-
-  // 🧰 Misc Tools
-  'Safety Goggles',
-  'Measuring Tape',
-  'Spirit Level',
-  'Tool Box',
-  'Work Gloves',
-  'Flashlight',
-  'Headlamp',
-  'Ladder',
-  'Stud Finder'
+  'Cordless Drill', 'Screwdriver Set', 'Hammer', 'Pliers', 'Adjustable Wrench', 'Wrench Set',
+  'Wire Cutter', 'Utility Knife', 'Chisel Set', 'Hand Saw', 'Putty Knife', 'Hacksaw',
+  'Staple Gun', 'Allen Key Set', 'Clamps', 'Multimeter', 'Soldering Iron', 'Heat Gun',
+  'Glue Gun', 'Wire Stripper', 'Desoldering Pump', 'Insulation Tape', 'Pipe Wrench',
+  'Pipe Cutter', 'Plumber’s Tape', 'Basin Wrench', 'Paint Brush Set', 'Paint Roller',
+  'Sandpaper Set', 'Masking Tape', 'Drop Cloth', 'Silicone Gun', 'Caulking Tool',
+  'Paint Scraper', 'Putty Knife', 'Safety Goggles', 'Measuring Tape', 'Spirit Level',
+  'Tool Box', 'Work Gloves', 'Flashlight', 'Headlamp', 'Ladder', 'Stud Finder'
 ];
-
 
 export default function InventoryScreen() {
   const [search, setSearch] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [inventory, setInventory] = useState([]);
   const [user, setUser] = useState(null);
+  const tabBarHeight = useBottomTabBarHeight();
 
   useEffect(() => {
     const unsubscribe = auth().onAuthStateChanged(setUser);
@@ -97,13 +67,7 @@ export default function InventoryScreen() {
   };
 
   const addTool = async (toolName) => {
-    console.log("🟡 Attempting to add tool:", toolName);
-
-    if (!user) {
-      console.warn("❌ No user available");
-      return;
-    }
-
+    if (!user) return;
     const docId = toolName.toLowerCase().replace(/\s+/g, '_');
 
     try {
@@ -114,26 +78,16 @@ export default function InventoryScreen() {
         .doc(docId)
         .set({ name: toolName, owned: true });
 
-      console.log("✅ Tool saved to Firestore:", docId);
-
-      setInventory(prev => {
-        const updated = [...prev, toolName];
-        console.log("📦 Updated inventory state:", updated);
-        return updated;
-      });
-
+      setInventory(prev => [...prev, toolName]);
       setSearch('');
       setSuggestions([]);
-
     } catch (error) {
       console.error("🔥 Error adding tool:", error);
     }
   };
 
-
   const removeTool = async (toolName) => {
     if (!user) return;
-
     const docId = toolName.toLowerCase().replace(/\s+/g, '_');
 
     await firestore()
@@ -147,81 +101,149 @@ export default function InventoryScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>🧰 Your Inventory</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Search or add a tool..."
-        value={search}
-        onChangeText={handleSearch}
-      />
-      {suggestions.length > 0 && (
-        <FlatList
-          data={suggestions}
-          keyExtractor={(item) => item}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              onPress={() => {
-                console.log("📲 Pressed item:", item);
-                addTool(item);
-              }}
-              style={styles.suggestion}
+    <SafeAreaView style={{ flex: 1 }}>
+      <ImageBackground
+        source={require('../../assets/background.png')}
+        style={styles.background}
+        resizeMode="cover"
+      >
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={80}
+        >
+          <TouchableWithoutFeedback
+            onPress={() => {
+              Keyboard.dismiss();
+              setSuggestions([]);
+            }}
+          >
+            <ScrollView
+              contentContainerStyle={[styles.overlay, { paddingBottom: tabBarHeight + 30 }]}
+              keyboardShouldPersistTaps="handled"
             >
-              <Text>{item}</Text>
-            </TouchableOpacity>
-          )}
-        />
-      )}
-      <View style={styles.inventoryList}>
-        {inventory.map((item) => (
-          <View key={item} style={styles.tag}>
-            <Text>{item}</Text>
-            <TouchableOpacity onPress={() => removeTool(item)}>
-              <Text style={styles.remove}> × </Text>
-            </TouchableOpacity>
-          </View>
-        ))}
-      </View>
-    </View>
+              <Text style={styles.title}>🧰 My Inventory</Text>
+
+              <TextInput
+                style={styles.input}
+                placeholder="Search or add a tool..."
+                placeholderTextColor="#999"
+                value={search}
+                onChangeText={handleSearch}
+              />
+
+              {suggestions.length > 0 && (
+                <FlatList
+                  data={suggestions}
+                  keyExtractor={(item) => item}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
+                      onPress={() => addTool(item)}
+                      style={styles.suggestion}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.suggestionText}>➕ {item}</Text>
+                    </TouchableOpacity>
+                  )}
+                  keyboardShouldPersistTaps="handled"
+                  style={{ marginBottom: 20 }}
+                />
+              )}
+
+              <Text style={styles.subtitle}>📦 Owned Tools</Text>
+              {inventory.length === 0 ? (
+                <Text style={styles.empty}>You haven’t added any tools yet.</Text>
+              ) : (
+                <View style={styles.inventoryList}>
+                  {inventory.map((item) => (
+                    <View key={item} style={styles.tag}>
+                      <Text style={styles.tagText}>{item}</Text>
+                      <TouchableOpacity onPress={() => removeTool(item)} activeOpacity={0.6}>
+                        <Text style={styles.remove}>×</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </ScrollView>
+          </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
+      </ImageBackground>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 20, flex: 1 },
-  title: { fontSize: 22, marginBottom: 20 },
+  background: {
+    flex: 1,
+  },
+  overlay: {
+    padding: 20,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: '600',
+    color: '#fff',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  subtitle: {
+    fontSize: 18,
+    color: '#fff',
+    marginBottom: 10,
+    marginTop: 10,
+  },
   input: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 6,
-    padding: 10,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     fontSize: 16,
     marginBottom: 10,
   },
   suggestion: {
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    backgroundColor: '#eee',
-    marginBottom: 5,
-    borderRadius: 6,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 6,
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  suggestionText: {
+    fontSize: 15,
+    color: '#333',
+  },
+  empty: {
+    textAlign: 'center',
+    color: '#ddd',
+    fontSize: 15,
+    marginTop: 20,
   },
   inventoryList: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginTop: 20,
+    gap: 10,
+    marginTop: 10,
   },
   tag: {
-    backgroundColor: '#ddd',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    margin: 5,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderRadius: 20,
     flexDirection: 'row',
     alignItems: 'center',
+    margin: 5,
+    minHeight: 36,
+  },
+  tagText: {
+    fontSize: 14,
+    color: '#000',
   },
   remove: {
-    marginLeft: 8,
-    color: 'red',
+    marginLeft: 10,
+    fontSize: 18,
     fontWeight: 'bold',
-    fontSize: 16,
+    color: 'red',
   },
 });
