@@ -1,9 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, Button, StyleSheet, Alert } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  Button,
+  StyleSheet,
+  Alert,
+  ScrollView,
+} from 'react-native';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 import { Picker } from '@react-native-picker/picker';
-
+import { useNavigation } from '@react-navigation/native';
 
 export default function ProfileScreen() {
   const [firstName, setFirstName] = useState('');
@@ -11,6 +19,7 @@ export default function ProfileScreen() {
   const [skillLevel, setSkillLevel] = useState('');
   const [toolPreference, setToolPreference] = useState('');
   const user = auth().currentUser;
+  const navigation = useNavigation();
 
   useEffect(() => {
     if (user) {
@@ -54,8 +63,18 @@ export default function ProfileScreen() {
     }
   };
 
+  const handleLogout = async () => {
+    try {
+      await auth().signOut();
+      // App.js navigation yönetecek
+    } catch (error) {
+      console.error('Logout failed:', error);
+      Alert.alert('Logout Error', error.message);
+    }
+  };
+
   return (
-    <View style={styles.container}>
+    <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>👤 Your Profile</Text>
 
       <TextInput
@@ -88,14 +107,28 @@ export default function ProfileScreen() {
         <Picker.Item label="No Preference" value="no_preference" />
       </Picker>
 
-      <Button title="💾 Save Profile" onPress={handleSave} />
-    </View>
+      <View style={styles.buttonContainer}>
+        <Button title="💾 Save Profile" onPress={handleSave} />
+      </View>
+
+      <View style={styles.buttonContainer}>
+        <Button title="🚪 Log Out" onPress={handleLogout} color="#cc0000" />
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 20, flex: 1 },
-  title: { fontSize: 24, marginBottom: 20 },
+  container: {
+    padding: 20,
+    flexGrow: 1,
+    justifyContent: 'center',
+  },
+  title: {
+    fontSize: 24,
+    marginBottom: 20,
+    alignSelf: 'center',
+  },
   input: {
     borderWidth: 1,
     borderColor: '#ccc',
@@ -108,5 +141,8 @@ const styles = StyleSheet.create({
     marginTop: 15,
     fontWeight: 'bold',
     marginBottom: 5,
+  },
+  buttonContainer: {
+    marginTop: 20,
   },
 });
