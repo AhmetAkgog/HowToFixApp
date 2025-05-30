@@ -1,18 +1,21 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
-  Button,
-  Image,
   Text,
   TextInput,
-  StyleSheet,
-  ScrollView,
+  Image,
   ActivityIndicator,
+  ScrollView,
+  StyleSheet,
   Switch,
+  TouchableOpacity,
   FlatList,
   KeyboardAvoidingView,
   Platform,
+  ImageBackground,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { launchImageLibrary } from 'react-native-image-picker';
 import functions from '@react-native-firebase/functions';
 import auth from '@react-native-firebase/auth';
@@ -22,21 +25,18 @@ export default function ProblemUploader() {
   const [description, setDescription] = useState('');
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [user, setUser] = useState(null);
   const [textOnlyMode, setTextOnlyMode] = useState(false);
   const [sessionId, setSessionId] = useState(null);
   const [showChat, setShowChat] = useState(false);
   const [chatInput, setChatInput] = useState('');
   const [chatMessages, setChatMessages] = useState([]);
-
   const flatListRef = useRef(null);
+  const tabBarHeight = useBottomTabBarHeight();
 
   useEffect(() => {
-    const unsubscribe = auth().onAuthStateChanged(u => {
-      setUser(u);
-      console.log("👤 Authenticated user:", u?.email);
+    return auth().onAuthStateChanged(u => {
+      console.log("👤 Authenticated:", u?.email);
     });
-    return unsubscribe;
   }, []);
 
   const handleUpload = async () => {
@@ -53,40 +53,24 @@ export default function ProblemUploader() {
     };
 
     if (!textOnlyMode) {
-      const res = await launchImageLibrary({
-        mediaType: 'photo',
-        includeBase64: true,
-      });
-
+      const res = await launchImageLibrary({ mediaType: 'photo', includeBase64: true });
       const asset = res?.assets?.[0];
       if (!asset?.base64) return;
-
       setImageUri(asset.uri);
       data.base64Image = asset.base64;
     }
 
     setLoading(true);
-
     try {
       const extractProblem = functions().httpsCallable('extractProblemMultimodalV2');
       const response = await extractProblem(data);
+      const { object, issue, taskType, likelyCause, instructions, toolSuggestions, sessionId: sid } = response.data;
 
       if (response.data?.success) {
-        const {
-          object,
-          issue,
-          taskType,
-          likelyCause,
-          instructions,
-          toolSuggestions,
-          sessionId: returnedSessionId,
-        } = response.data;
-
         setResult(
           `🧠 Object: ${object}\n🔧 Issue: ${issue}\n📂 Task Type: ${taskType}\n💡 Likely Cause: ${likelyCause}\n📋 Instructions:\n${instructions}\n🛍️ Suggested Products:\n${toolSuggestions || 'None'}`
         );
-
-        setSessionId(returnedSessionId);
+        setSessionId(sid);
         setChatMessages([
           { role: 'user', content: description || '(image-based problem)' },
           { role: 'assistant', content: instructions }
@@ -94,9 +78,9 @@ export default function ProblemUploader() {
       } else {
         setResult("⚠️ Backend error: " + response.data?.error);
       }
-    } catch (error) {
-      console.error('❌ Function call error:', error);
-      setResult('Error: ' + error.message);
+    } catch (e) {
+      console.error(e);
+      setResult('❌ Error: ' + e.message);
     } finally {
       setLoading(false);
     }
@@ -105,10 +89,8 @@ export default function ProblemUploader() {
   const handleSendFollowUp = async () => {
     if (!chatInput.trim()) return;
     const chatWithAssistant = functions().httpsCallable('chatWithAssistant');
-
     const newMessage = { role: 'user', content: chatInput.trim() };
-    const updatedMessages = [...chatMessages, newMessage];
-    setChatMessages(updatedMessages);
+    setChatMessages(prev => [...prev, newMessage]);
     setChatInput('');
 
     try {
@@ -122,128 +104,197 @@ export default function ProblemUploader() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={80}
-    >
-      <View style={{ flex: 1 }}>
-        <ScrollView
-          contentContainerStyle={styles.container}
-          keyboardShouldPersistTaps="handled"
+    <SafeAreaView style={{ flex: 1 }} edges={['bottom']}>
+      <ImageBackground source={require('../../assets/background.png')} style={styles.background} resizeMode="cover">
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={80}
         >
-          <View style={styles.inputRow}>
-            <TextInput
-              style={[styles.input, { flex: 1 }]}
-              placeholder="Describe the problem (optional)"
-              value={description}
-              onChangeText={setDescription}
-              multiline
-            />
-            <View style={styles.switchWrapper}>
-              <Text style={styles.toggleLabel}>📝 Text Only</Text>
-              <Switch
-                value={textOnlyMode}
-                onValueChange={setTextOnlyMode}
-                trackColor={{ false: '#ccc', true: '#4caf50' }}
-                thumbColor={textOnlyMode ? '#fff' : '#f4f3f4'}
-              />
-            </View>
-          </View>
+          <View style={styles.overlay}>
+            <ScrollView
+              contentContainerStyle={[styles.container, { paddingBottom: tabBarHeight + 60 }]}
+              keyboardShouldPersistTaps="handled"
+            >
+              <Text style={styles.title}>🔧 Fix It Assistant</Text>
 
-          <Button title="Select Image & Submit" onPress={handleUpload} />
+              <View style={styles.card}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Describe the problem (optional)"
+                  placeholderTextColor="#888"
+                  value={description}
+                  onChangeText={setDescription}
+                  multiline
+                />
 
-          {!textOnlyMode && imageUri && (
-            <Image source={{ uri: imageUri }} style={styles.image} />
-          )}
+                <View style={styles.toggleArea}>
+                  <Text style={styles.toggleLabel}>📝 Text Only</Text>
+                  <Switch
+                    value={textOnlyMode}
+                    onValueChange={setTextOnlyMode}
+                    trackColor={{ false: '#999', true: '#4caf50' }}
+                    thumbColor="#fff"
+                  />
+                </View>
 
-          {loading && <ActivityIndicator style={{ marginTop: 20 }} />}
+                <TouchableOpacity style={styles.button} onPress={handleUpload}>
+                  <Text style={styles.buttonText}>
+                    {textOnlyMode ? 'Submit' : 'Select Image & Submit'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
 
-          {result && <Text style={styles.result}>{result}</Text>}
+              {!textOnlyMode && imageUri && (
+                <Image source={{ uri: imageUri }} style={styles.image} />
+              )}
 
-          {result && !showChat && (
-            <Button title="🗨️ Continue Chat" onPress={() => setShowChat(true)} />
-          )}
-        </ScrollView>
+              {loading && <ActivityIndicator size="large" style={{ marginTop: 20 }} />}
 
-        {showChat && (
-          <>
-            <FlatList
-              ref={flatListRef}
-              data={chatMessages}
-              renderItem={({ item }) => (
-                <View style={[styles.bubble, item.role === 'user' ? styles.user : styles.assistant]}>
-                  <Text>{item.content}</Text>
+              {result && <Text style={styles.result}>{result}</Text>}
+
+              {result && !showChat && (
+                <TouchableOpacity
+                  style={[styles.button, { backgroundColor: '#222', marginBottom: 20 }]}
+                  onPress={() => setShowChat(true)}
+                >
+                  <Text style={styles.buttonText}>🗨️ Continue Chat</Text>
+                </TouchableOpacity>
+              )}
+
+              {showChat && (
+                <View style={[styles.card, { marginBottom: tabBarHeight + 20 }]}>
+                  <FlatList
+                    ref={flatListRef}
+                    data={chatMessages}
+                    renderItem={({ item }) => (
+                      <View style={[styles.bubble, item.role === 'user' ? styles.user : styles.assistant]}>
+                        <Text>{item.content}</Text>
+                      </View>
+                    )}
+                    keyExtractor={(_, index) => index.toString()}
+                    contentContainerStyle={{ paddingBottom: 10 }}
+                    onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+                    showsVerticalScrollIndicator={true}
+                  />
+
+                  <View style={styles.inputRow}>
+                    <TextInput
+                      style={[styles.chatInput, { flex: 1 }]}
+                      placeholder="Ask a follow-up..."
+                      value={chatInput}
+                      onChangeText={setChatInput}
+                    />
+                    <TouchableOpacity style={styles.sendButton} onPress={handleSendFollowUp}>
+                      <Text style={styles.sendButtonText}>Send</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               )}
-              keyExtractor={(_, index) => index.toString()}
-              contentContainerStyle={{ padding: 10 }}
-              style={styles.chatBox}
-              onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-            />
-            <View style={[styles.inputRow, { padding: 10 }]}>
-              <TextInput
-                style={[styles.input, { flex: 1, marginBottom: 0 }]}
-                placeholder="Ask a follow-up..."
-                value={chatInput}
-                onChangeText={setChatInput}
-              />
-              <Button title="Send" onPress={handleSendFollowUp} />
-            </View>
-          </>
-        )}
-      </View>
-    </KeyboardAvoidingView>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </ImageBackground>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  background: {
+    flex: 1,
+  },
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
   container: {
     padding: 20,
-    flexGrow: 1,
+    alignItems: 'stretch',
   },
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 10,
+  title: {
+    fontSize: 22,
+    fontWeight: '600',
+    marginBottom: 20,
+    textAlign: 'center',
+    color: '#fff',
   },
-  switchWrapper: {
-    marginLeft: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  toggleLabel: {
-    fontSize: 14,
-    marginBottom: 4,
+  card: {
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    padding: 16,
+    borderRadius: 12,
+    elevation: 5,
+    marginBottom: 20,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 6,
-    padding: 10,
+    borderColor: '#ddd',
+    borderRadius: 10,
+    padding: 12,
+    backgroundColor: '#fff',
     fontSize: 16,
-    marginBottom: 15,
+    color: '#000',
+    marginBottom: 10,
+  },
+  chatInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 10,
+    padding: 10,
+    backgroundColor: '#fff',
+    fontSize: 16,
+    color: '#000',
+    marginRight: 8,
+  },
+  sendButton: {
+    backgroundColor: '#004f5d',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sendButtonText: {
+    color: '#fff',
+    fontSize: 15,
+  },
+  toggleArea: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  toggleLabel: {
+    fontSize: 14,
+    marginRight: 10,
+    color: '#333',
+  },
+  button: {
+    backgroundColor: '#004f5d',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 16,
   },
   image: {
     marginTop: 20,
-    width: 300,
-    height: 300,
-    borderRadius: 8,
+    width: '100%',
+    height: 250,
+    borderRadius: 10,
+    resizeMode: 'cover',
   },
   result: {
-    marginTop: 20,
-    fontSize: 16,
-    textAlign: 'left',
+    marginTop: 25,
+    fontSize: 15,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    padding: 14,
+    borderRadius: 8,
+    lineHeight: 22,
+    color: '#222',
     whiteSpace: 'pre-line',
-  },
-  chatBox: {
-    maxHeight: 300,
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 6,
-    padding: 10,
-    backgroundColor: '#fff',
-    marginBottom: 10,
   },
   bubble: {
     padding: 10,
@@ -258,5 +309,10 @@ const styles = StyleSheet.create({
   assistant: {
     alignSelf: 'flex-start',
     backgroundColor: '#f0f0f0',
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
   },
 });
