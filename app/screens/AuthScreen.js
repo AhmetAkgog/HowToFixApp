@@ -2,6 +2,8 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, Button, StyleSheet, Alert } from 'react-native';
 import auth from '@react-native-firebase/auth';
+import firestore from '@react-native-firebase/firestore';
+
 
 export default function AuthScreen() {
   const [email, setEmail] = useState('');
@@ -13,13 +15,29 @@ export default function AuthScreen() {
       if (isLogin) {
         await auth().signInWithEmailAndPassword(email, password);
       } else {
-        await auth().createUserWithEmailAndPassword(email, password);
+        const userCredential = await auth().createUserWithEmailAndPassword(email, password);
+        const user = userCredential.user;
+
+        // ✅ Create Firestore profile
+        await firestore()
+          .collection('users')
+          .doc(user.uid)
+          .collection('profile')
+          .doc('info')
+          .set({
+            uid: user.uid,
+            email: user.email || '',
+            firstName: '',
+            lastName: '',
+            skillLevel: '',
+            toolPreference: '',
+          });
       }
-      // ❌ No need to call onAuthenticated — App.js watches auth state
     } catch (err) {
       Alert.alert('Auth Error', err.message);
     }
   };
+
 
   return (
     <View style={styles.container}>
